@@ -1,0 +1,56 @@
+name: Replace URLs on Update
+
+on:
+  # 当上游仓库有更新时，可以通过创建一个Pull Request来触发此工作流
+  pull_request:
+    branches:
+      - main  # 假设当前仓库的主要分支是main
+
+jobs:
+  replace-urls:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # 获取完整的历史记录
+
+      - name: Checkout upstream repository
+        run: |
+          git remote add upstream https://github.com/kejilion/sh.git
+          git fetch upstream
+          git checkout -b upstream-branch upstream/main  # 创建一个新分支来处理上游仓库的更新
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用默认的GITHUB_TOKEN进行认证
+
+      - name: Replace URLs
+        run: |
+          original_url="https://raw.githubusercontent.com"
+          target_url="https://dl.dpk.us.kg/https://raw.githubusercontent.com"
+
+          archive_url_regex="https://github.com/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/archive/(master|v[0-9]+\\.[0-9]+\\.[0-9]+)\\.(zip|tar\\.gz)"
+
+          # 替换上游仓库中的URL
+          find . -type f ! -path './.github/*' -exec grep -lE "$original_url|$archive_url_regex" {} \; | while read file; do
+            sed -i "s|$original_url|$target_url|g" "$file"
+          done
+
+          find . -type f ! -path './.github/*' -exec grep -lE "$archive_url_regex" {} \; | while read file; do
+            sed -i -E "s|($archive_url_regex)|https://dl.dpk.us.kg/\1|g" "$file"
+          done
+
+          # 配置Git用户信息
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          # 添加、提交更改到本地分支
+          git add .
+          git commit -m "Replace URLs" || echo "No changes to commit."
+
+      - name: Push changes to local repository
+        run: |
+          # 推送更改到当前仓库的main分支
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git upstream-branch:main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
